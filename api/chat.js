@@ -1,7 +1,7 @@
 // Tệp: api/chat.js
 export default async function handler(req, res) {
 
-  // 1. Cấu hình CORS để cho phép tiện ích gọi
+  // Cấu hình CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -15,25 +15,19 @@ export default async function handler(req, res) {
   }
 
   const { context, question } = req.body;
+  
+  // Lấy Key từ Vercel (Cái key bạn vừa dán vào Settings)
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
   if (!GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'API key chưa được cấu hình' });
+    return res.status(500).json({ error: 'API key chưa được cấu hình trên server' });
   }
 
-  // --- THAY ĐỔI QUAN TRỌNG: DÙNG MÃ ĐỊNH DANH CỤ THỂ (-001) ---
-  // Thay vì 'gemini-pro' hay 'gemini-1.5-flash' (dễ lỗi), ta dùng bản cứng:
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${GEMINI_API_KEY}`;
-
-  const prompt = `Dựa vào thông tin trong bối cảnh sau đây:
-  --- BỐI CẢNH ---
-  ${context}
-  --- KẾT THÚC BỐI CẢNH ---
-  Hãy trả lời câu hỏi sau một cách ngắn gọn, chính xác và chỉ dựa vào thông tin trong bối cảnh đã cho.
-  Câu hỏi: "${question}"`;
+  // Dùng model chuẩn quốc tế: gemini-1.5-flash
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
   const requestBody = {
-    contents: [{ parts: [{ text: prompt }] }]
+    contents: [{ parts: [{ text: `Dựa vào thông tin: \n${context}\n\nTrả lời câu hỏi: ${question}` }] }]
   };
 
   try {
@@ -49,15 +43,10 @@ export default async function handler(req, res) {
     }
 
     const responseData = await response.json();
-    
-    if (!responseData.candidates || responseData.candidates.length === 0) {
-        throw new Error("AI không trả về kết quả.");
-    }
-
     const text = responseData.candidates[0].content.parts[0].text;
     return res.status(200).json({ answer: text });
 
   } catch (error) {
-    return res.status(500).json({ error: `Lỗi từ Google: ${error.message}` });
+    return res.status(500).json({ error: `Lỗi AI: ${error.message}` });
   }
 }
