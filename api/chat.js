@@ -16,18 +16,17 @@ export default async function handler(req, res) {
 
   const { context, question } = req.body;
   
-  // Lấy Key từ Vercel (Cái key bạn vừa dán vào Settings)
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
   if (!GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'API key chưa được cấu hình trên server' });
+    return res.status(500).json({ error: 'API key chưa được cấu hình' });
   }
 
-  // Dùng model chuẩn quốc tế: gemini-1.5-flash
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  // --- SỬA THÀNH GEMINI-PRO (CHẠY ĐƯỢC MỌI TÀI KHOẢN) ---
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 
   const requestBody = {
-    contents: [{ parts: [{ text: `Dựa vào thông tin: \n${context}\n\nTrả lời câu hỏi: ${question}` }] }]
+    contents: [{ parts: [{ text: `Dựa vào: \n${context}\n\nTrả lời: ${question}` }] }]
   };
 
   try {
@@ -47,6 +46,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ answer: text });
 
   } catch (error) {
-    return res.status(500).json({ error: `Lỗi AI: ${error.message}` });
+    return res.status(500).json({ error: `Lỗi Google: ${error.message}` });
   }
 }
