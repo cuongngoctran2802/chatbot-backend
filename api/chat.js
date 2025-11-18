@@ -1,6 +1,7 @@
 // Tệp: api/chat.js
 export default async function handler(req, res) {
 
+  // 1. Cấu hình CORS để cho phép tiện ích gọi
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -20,8 +21,9 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'API key chưa được cấu hình' });
   }
 
-  // --- SỬA LẦN CUỐI: DÙNG GEMINI PRO (ỔN ĐỊNH NHẤT) ---
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+  // --- THAY ĐỔI QUAN TRỌNG: DÙNG MÃ ĐỊNH DANH CỤ THỂ (-001) ---
+  // Thay vì 'gemini-pro' hay 'gemini-1.5-flash' (dễ lỗi), ta dùng bản cứng:
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${GEMINI_API_KEY}`;
 
   const prompt = `Dựa vào thông tin trong bối cảnh sau đây:
   --- BỐI CẢNH ---
@@ -43,15 +45,13 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errorData = await response.json();
-      // Ghi log lỗi cụ thể để dễ debug nếu cần
       throw new Error(errorData.error.message);
     }
 
     const responseData = await response.json();
     
-    // Kiểm tra kỹ cấu trúc trả về của Gemini Pro
     if (!responseData.candidates || responseData.candidates.length === 0) {
-        throw new Error("AI không trả về kết quả nào.");
+        throw new Error("AI không trả về kết quả.");
     }
 
     const text = responseData.candidates[0].content.parts[0].text;
