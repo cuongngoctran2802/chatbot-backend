@@ -1,62 +1,57 @@
 // Tệp: api/chat.js
 export default async function handler(req, res) {
-
-  // 1. Cấu hình CORS (Cho phép tiện ích gọi đến)
+  // 1. Cấu hình CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Xử lý yêu cầu kiểm tra trước (Preflight)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // Chỉ chấp nhận phương thức POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
+  // --- KIỂM TRA MÔI TRƯỜNG VERCEL ---
+  if (typeof fetch === 'undefined') {
+    return res.status(500).json({ 
+      error: 'LỖI MÔI TRƯỜNG: Node.js trên Vercel quá cũ, không có lệnh fetch. Hãy vào Settings > General > Node.js Version và chọn bản 18.x hoặc 20.x' 
+    });
   }
 
-  // --- PHẦN QUAN TRỌNG: API KEY ĐƯỢC DÁN TRỰC TIẾP ---
-  // Đây là key bạn đã cung cấp: AIzaSyAfoDhnXqJl1og1kT8j_bsHXBKJUeXKKlQ
-  const GEMINI_API_KEY = 'AIzaSyAfoDhnXqJl1og1kT8j_bsHXBKJUeXKKlQ';
-
-  // Sử dụng model chuẩn: gemini-1.5-flash
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
   try {
-    const { context, question } = req.body;
+    // --- DÙNG KEY CỨNG ĐỂ TEST ---
+    const GEMINI_API_KEY = 'AIzaSyAfoDhnXqJl1og1kT8j_bsHXBKJUeXKKlQ';
 
-    // Tạo nội dung gửi đi
-    const prompt = `Dựa vào thông tin sau đây:\n${context}\n\nHãy trả lời câu hỏi: ${question}`;
+    // --- BỎ QUA req.body, TEST BẰNG CÂU CHÀO CỐ ĐỊNH ---
+    // Điều này giúp loại trừ lỗi do dữ liệu gửi lên bị sai
+    const testPrompt = "Hãy trả lời 'Kết nối thành công!' nếu bạn nhận được tin nhắn này.";
     
-    const requestBody = {
-      contents: [{ parts: [{ text: prompt }] }]
-    };
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-    // Gọi đến Google
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: testPrompt }] }]
+      }),
     });
 
-    // Xử lý lỗi từ Google trả về
-    if (!response.ok) {
-      const errorData = await response.json();
-      // Trả về nguyên văn lỗi để dễ debug
-      throw new Error(errorData.error.message);
-    }
-
-    // Xử lý kết quả thành công
     const responseData = await response.json();
-    
-    if (!responseData.candidates || responseData.candidates.length === 0) {
-        throw new Error("AI không trả về nội dung nào.");
+
+    // Nếu Google báo lỗi, trả về chi tiết lỗi đó
+    if (!response.ok) {
+      return res.status(500).json({ 
+        error: `Google chặn: ${responseData.error?.message || 'Lỗi không xác định'}` 
+      });
     }
 
-    const text = responseData.candidates[0].content.parts[0].text;
-    
-    // Gửi câu trả lời về tiện ích
+    // Nếu thành công
+    const text = responseData.candidates?.[0]?.content?.parts?.[0]?.text || "Không có nội dung trả về";
     return res.status(200).json({ answer: text });
 
-  } catch (
+  } catch (error) {
+    // Bắt mọi lỗi sập server và in ra
+    return res.status(500).json({ 
+      error: `SERVER CRASH: ${error.message}`,
+      stack: error.stack 
+    });
+  }
+}
