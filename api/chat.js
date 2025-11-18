@@ -20,8 +20,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'API key chưa được cấu hình' });
   }
 
-  // --- ĐÃ SỬA TÊN MODEL TẠI ĐÂY (XÓA -latest) ---
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  // --- SỬA LẦN CUỐI: DÙNG GEMINI PRO (ỔN ĐỊNH NHẤT) ---
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 
   const prompt = `Dựa vào thông tin trong bối cảnh sau đây:
   --- BỐI CẢNH ---
@@ -43,12 +43,18 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errorData = await response.json();
+      // Ghi log lỗi cụ thể để dễ debug nếu cần
       throw new Error(errorData.error.message);
     }
 
     const responseData = await response.json();
-    const text = responseData.candidates[0].content.parts[0].text;
+    
+    // Kiểm tra kỹ cấu trúc trả về của Gemini Pro
+    if (!responseData.candidates || responseData.candidates.length === 0) {
+        throw new Error("AI không trả về kết quả nào.");
+    }
 
+    const text = responseData.candidates[0].content.parts[0].text;
     return res.status(200).json({ answer: text });
 
   } catch (error) {
