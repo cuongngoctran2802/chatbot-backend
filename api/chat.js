@@ -1,6 +1,7 @@
 // Tệp: api/chat.js
 export default async function handler(req, res) {
-  // 1. Cấu hình CORS
+
+  // Cấu hình CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -9,49 +10,43 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // --- KIỂM TRA MÔI TRƯỜNG VERCEL ---
-  if (typeof fetch === 'undefined') {
-    return res.status(500).json({ 
-      error: 'LỖI MÔI TRƯỜNG: Node.js trên Vercel quá cũ, không có lệnh fetch. Hãy vào Settings > General > Node.js Version và chọn bản 18.x hoặc 20.x' 
-    });
+  // --- API KEY ĐƯỢC DÁN CỨNG ĐỂ KIỂM TRA ---
+  const GEMINI_API_KEY = 'AIzaSyBtbup9ntf3ALYoC8Xh5hVyvby0n7o_Nsg'; 
+  
+  if (!GEMINI_API_KEY || GEMINI_API_KEY.includes('DÁN_KEY')) {
+      return res.status(500).json({ error: 'Lỗi: Key chưa được điền hoặc bị trống!' });
   }
 
-  try {
-    // --- DÙNG KEY CỨNG ĐỂ TEST ---
-    const GEMINI_API_KEY = 'AIzaSyAfoDhnXqJl1og1kT8j_bsHXBKJUeXKKlQ';
+  // Sử dụng model gemini-pro (ổn định nhất)
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 
-    // --- BỎ QUA req.body, TEST BẰNG CÂU CHÀO CỐ ĐỊNH ---
-    // Điều này giúp loại trừ lỗi do dữ liệu gửi lên bị sai
-    const testPrompt = "Hãy trả lời 'Kết nối thành công!' nếu bạn nhận được tin nhắn này.";
+  try {
+    // Prompt kiểm tra kết nối
+    const testPrompt = "Xin chào, hãy trả lời ngắn gọn là: 'Đã kết nối thành công!'";
     
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const requestBody = {
+      contents: [{ parts: [{ text: testPrompt }] }]
+    };
 
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: testPrompt }] }]
-      }),
+      body: JSON.stringify(requestBody),
     });
 
-    const responseData = await response.json();
-
-    // Nếu Google báo lỗi, trả về chi tiết lỗi đó
     if (!response.ok) {
-      return res.status(500).json({ 
-        error: `Google chặn: ${responseData.error?.message || 'Lỗi không xác định'}` 
-      });
+      const errorData = await response.json();
+      // Nếu Key không đúng quyền, lỗi sẽ xuất hiện tại đây
+      throw new Error(errorData.error.message);
     }
 
-    // Nếu thành công
+    const responseData = await response.json();
     const text = responseData.candidates?.[0]?.content?.parts?.[0]?.text || "Không có nội dung trả về";
+    
+    // Gửi câu trả lời về tiện ích
     return res.status(200).json({ answer: text });
 
   } catch (error) {
-    // Bắt mọi lỗi sập server và in ra
-    return res.status(500).json({ 
-      error: `SERVER CRASH: ${error.message}`,
-      stack: error.stack 
-    });
+    return res.status(500).json({ error: `Lỗi Server: ${error.message}` });
   }
 }
