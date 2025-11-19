@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Chatbot (Cloud Backend)",
+  "version": "7.0",
+  "description": "Chatbot sử dụng máy chủ trung gian Vercel để bảo mật API key.",
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://teefan.github.io/*",
+    "https://*.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
