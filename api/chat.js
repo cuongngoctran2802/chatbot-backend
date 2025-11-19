@@ -1,52 +1,92 @@
-// Tệp: api/chat.js
 export default async function handler(req, res) {
-
-  // Cấu hình CORS
+  // CORS (thêm Authorization nếu client gửi token)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // --- API KEY ĐƯỢC DÁN CỨNG ĐỂ KIỂM TRA ---
-  const GEMINI_API_KEY = 'AIzaSyBtbup9ntf3ALYoC8Xh5hVyvby0n7o_Nsg'; 
-  
-  if (!GEMINI_API_KEY || GEMINI_API_KEY.includes('DÁN_KEY')) {
-      return res.status(500).json({ error: 'Lỗi: Key chưa được điền hoặc bị trống!' });
-  }
-
-  // Sử dụng model gemini-pro (ổn định nhất)
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-
   try {
-    // Prompt kiểm tra kết nối
-    const testPrompt = "Xin chào, hãy trả lời ngắn gọn là: 'Đã kết nối thành công!'";
-    
-    const requestBody = {
-      contents: [{ parts: [{ text: testPrompt }] }]
-    };
-
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      // Nếu Key không đúng quyền, lỗi sẽ xuất hiện tại đây
-      throw new Error(errorData.error.message);
+    // LẤY KEY TỪ BIẾN MÔI TRƯỜNG (Vercel -> Environment Variables)
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) {
+      console.error('Missing GEMINI_API_KEY environment variable');
+      return res.status(500).json({ error: 'Server misconfigured: missing API key' });
     }
 
-    const responseData = await response.json();
-    const text = responseData.candidates?.[0]?.content?.parts?.[0]?.text || "Không có nội dung trả về";
-    
-    // Gửi câu trả lời về tiện ích
+    // Lấy prompt từ body nếu client gửi, hoặc dùng prompt test
+    const clientPrompt = (req.body && (req.body.prompt || req.body.message)) || null;
+    const prompt = clientPrompt || "Xin chào, hãy trả lời ngắn gọn là: 'Đã kết nối thành công!'";
+
+    // NOTE: Kiểm tra docs Generative Language API và điều chỉnh schema nếu cần
+    const requestBody = {
+      contents: [{ parts: [{ text: prompt }] }]
+    };
+
+    // Hỗ trợ cả 2 cách: key query param (API key Google) hoặc Bearer token
+    const useKeyQuery = /^AIza/.test(GEMINI_API_KEY);
+    const API_URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+    const API_URL = useKeyQuery ? `${API_URL_BASE}?key=${GEMINI_API_KEY}` : API_URL_BASE;
+
+    // Timeout cho fetch
+    const controller = new AbortController();
+    const timeoutMs = 30000; // 30s
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (!useKeyQuery) {
+      headers['Authorization'] = `Bearer ${GEMINI_API_KEY}`;
+    }
+
+    const upstream = await fetch(API_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timeout));
+
+    if (!upstream.ok) {
+      // Cố gắng parse JSON lỗi, fallback sang text
+      let detail;
+      try {
+        const errJson = await upstream.json();
+        detail = JSON.stringify(errJson);
+      } catch (e) {
+        detail = await upstream.text().catch(() => 'No body');
+      }
+      console.error('Upstream API returned error', upstream.status, detail);
+      return res.status(502).json({ error: 'Upstream API error', status: upstream.status, details: detail });
+    }
+
+    // Parse response (nhiều biến thể tùy API version)
+    let data;
+    try {
+      data = await upstream.json();
+    } catch (e) {
+      console.error('Failed to parse upstream JSON', e);
+      return res.status(502).json({ error: 'Invalid JSON from upstream API' });
+    }
+
+    // Cố gắng trích text theo nhiều cấu trúc khác nhau
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+      || data?.candidates?.[0]?.output
+      || data?.output
+      || null;
+
+    if (!text) {
+      console.warn('Upstream returned no text, returning full payload for debugging');
+      return res.status(200).json({ answer: null, raw: data });
+    }
+
     return res.status(200).json({ answer: text });
 
-  } catch (error) {
-    return res.status(500).json({ error: `Lỗi Server: ${error.message}` });
+  } catch (err) {
+    console.error('Handler error', err);
+    if (err.name === 'AbortError') {
+      return res.status(504).json({ error: 'Upstream request timed out' });
+    }
+    return res.status(500).json({ error: 'Internal server error', message: String(err) });
   }
 }
