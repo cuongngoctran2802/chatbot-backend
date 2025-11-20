@@ -1,0 +1,10 @@
+{
+  "name": "chatbot-backend",
+  "version": "1.0.1", 
+  "private": true,
+  "type": "module",
+  "description": "Vercel proxy for Hugging Face Inference API",
+  "scripts": {
+    "start": "vercel dev"
+  }
+}
